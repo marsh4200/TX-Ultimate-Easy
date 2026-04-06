@@ -1,1 +1,91 @@
+blueprint:
+  name: TX Ultimate Easy - Button Event Action
+  description: >-
+    Runs any Home Assistant action when a TX Ultimate Easy button event is fired.
+    This is the recommended way to use Home Assistant's live entity pickers for
+    click, double-click, long-press, and multi-click actions.
+  domain: automation
+  input:
+    tx_device_name:
+      name: TX device name
+      description: >-
+        The TX Ultimate Easy device_name from the esphome.tx_ultimate_easy event
+        payload, for example living_room_panel.
+      selector:
+        text:
+    button_id:
+      name: Button
+      description: Which TX button should trigger this automation.
+      selector:
+        select:
+          options:
+            - label: Button 1
+              value: "1"
+            - label: Button 2
+              value: "2"
+            - label: Button 3
+              value: "3"
+            - label: Button 4
+              value: "4"
+    button_action:
+      name: Button action
+      description: Which button action should trigger this automation.
+      selector:
+        select:
+          options:
+            - label: Click
+              value: click
+            - label: Double-click
+              value: double_click
+            - label: Long-press
+              value: long_press
+            - label: Multiple-click
+              value: multiple_click
+    click_count:
+      name: Exact click count
+      description: >-
+        Use 0 to ignore the count. Set 2 for double-click, 3 for triple-click,
+        and so on when using multiple_click.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 1
+          mode: box
+    action_sequence:
+      name: Action to run
+      description: >-
+        Choose any Home Assistant action here. The Home Assistant UI will give
+        you the normal service and entity pickers.
+      selector:
+        action:
 
+variables:
+  tx_device_name: !input tx_device_name
+  button_id: !input button_id
+  button_action: !input button_action
+  click_count: !input click_count
+
+triggers:
+  - trigger: event
+    event_type: esphome.tx_ultimate_easy
+
+conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.domain == 'touch' }}"
+  - condition: template
+    value_template: "{{ trigger.event.data.type == 'button' }}"
+  - condition: template
+    value_template: "{{ trigger.event.data.device_name | string == tx_device_name | string }}"
+  - condition: template
+    value_template: "{{ trigger.event.data.button_id | string == button_id | string }}"
+  - condition: template
+    value_template: "{{ trigger.event.data.action | string == button_action | string }}"
+  - condition: template
+    value_template: >-
+      {{ click_count | int(0) == 0 or trigger.event.data.count | int(0) == click_count | int(0) }}
+
+actions: !input action_sequence
+
+mode: single
