@@ -24,6 +24,23 @@ substitutions:
   BUTTON_3_ACTION_FAILSAFE_TEXT: "Relay 3 (API failsafe only)"
   BUTTON_4_ACTION_FAILSAFE_TEXT: "Relay 4 (API failsafe only)"
 
+  BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT: "None"
+  BUTTON_DOUBLE_CLICK_ACTION_RELAY_1_TOGGLE_TEXT: "Relay 1 (toggle)"
+  BUTTON_DOUBLE_CLICK_ACTION_RELAY_2_TOGGLE_TEXT: "Relay 2 (toggle)"
+  BUTTON_DOUBLE_CLICK_ACTION_RELAY_3_TOGGLE_TEXT: "Relay 3 (toggle)"
+  BUTTON_DOUBLE_CLICK_ACTION_RELAY_4_TOGGLE_TEXT: "Relay 4 (toggle)"
+  BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT: "Home Assistant target (toggle)"
+  BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT: "Home Assistant target (turn on)"
+  BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT: "Home Assistant target (turn off)"
+  BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT: "Media player target (play/pause)"
+  BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT: "Media player target (next track)"
+  BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT: "Media player target (previous track)"
+  BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT: "Media player target (stop)"
+  BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT: "Script target (run)"
+  BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT: "Scene target (activate)"
+  BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT: "Button target (press)"
+  BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT: "Automation target (trigger)"
+
   BUTTON_MULTI_CLICK_DELAY: "250"  # The time to wait for another click, in msec
   BUTTON_PRESS_TIMEOUT: "10000"  # Ignore if button is pressed for longer than this time, in msec
   BUTTON_LONG_PRESS_DELAY: "500"  # The time to wait to consider a long press, in msec
@@ -191,6 +208,249 @@ script:
           else if (click_count == 2) event_name = "double_click";
           else event_name = "multiple_click";
           button_action->execute(button, event_name.c_str(), click_count);
+      - if:
+          condition:
+            lambda: return click_count == 2;
+          then:
+            - script.execute:
+                id: button_double_click_handle
+                button: !lambda return button;
+
+  - id: button_double_click_handle
+    mode: parallel
+    parameters:
+      button: uint8_t
+    then:
+      - lambda: |-
+          std::string configured_action = "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}";
+          std::string target_entity_id;
+
+          switch (button) {
+            case ${BUTTON_1_ID}:
+              configured_action = sl_button_1_double_click_action->current_option();
+              target_entity_id = tx_button_1_double_click_target->state;
+              break;
+            case ${BUTTON_2_ID}:
+              configured_action = sl_button_2_double_click_action->current_option();
+              target_entity_id = tx_button_2_double_click_target->state;
+              break;
+            case ${BUTTON_3_ID}:
+              configured_action = sl_button_3_double_click_action->current_option();
+              target_entity_id = tx_button_3_double_click_target->state;
+              break;
+            case ${BUTTON_4_ID}:
+              configured_action = sl_button_4_double_click_action->current_option();
+              target_entity_id = tx_button_4_double_click_target->state;
+              break;
+            default:
+              ESP_LOGW("${TAG_HW_BUTTONS}", "Unsupported button %" PRIu8 " for double-click dispatch", button);
+              return;
+          }
+
+          ESP_LOGI("${TAG_HW_BUTTONS}",
+                   "Button %" PRIu8 " double-click action selected: '%s' target='%s'",
+                   button, configured_action.c_str(), target_entity_id.c_str());
+
+          if (configured_action == "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}") {
+            return;
+          }
+
+          if (target_entity_id.empty() &&
+              configured_action != "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_1_TOGGLE_TEXT}" &&
+              configured_action != "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_2_TOGGLE_TEXT}" &&
+              configured_action != "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_3_TOGGLE_TEXT}" &&
+              configured_action != "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_4_TOGGLE_TEXT}") {
+            ESP_LOGW("${TAG_HW_BUTTONS}",
+                     "Button %" PRIu8 " double-click action '%s' requires a target entity_id",
+                     button, configured_action.c_str());
+          }
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: homeassistant.toggle
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: homeassistant.turn_on
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: homeassistant.turn_off
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: media_player.media_play_pause
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: media_player.media_next_track
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: media_player.media_previous_track
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: media_player.media_stop
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: script.turn_on
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: scene.turn_on
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: button.press
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
+      - if:
+          condition:
+            lambda: |-
+              if (button == ${BUTTON_1_ID}) return id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}" && !id(tx_button_1_double_click_target).state.empty();
+              if (button == ${BUTTON_2_ID}) return id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}" && !id(tx_button_2_double_click_target).state.empty();
+              if (button == ${BUTTON_3_ID}) return id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}" && !id(tx_button_3_double_click_target).state.empty();
+              if (button == ${BUTTON_4_ID}) return id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}" && !id(tx_button_4_double_click_target).state.empty();
+              return false;
+          then:
+            - homeassistant.action:
+                action: automation.trigger
+                data:
+                  entity_id: !lambda |-
+                    if (button == ${BUTTON_1_ID}) return id(tx_button_1_double_click_target).state;
+                    if (button == ${BUTTON_2_ID}) return id(tx_button_2_double_click_target).state;
+                    if (button == ${BUTTON_3_ID}) return id(tx_button_3_double_click_target).state;
+                    return id(tx_button_4_double_click_target).state;
 
   - id: buttons_release
     mode: restart
@@ -252,6 +512,22 @@ script:
             #else
                                                                 sl_button_4_action->current_option() : "Unknown");
             #endif
+          ESP_LOGCONFIG("${TAG_HW_BUTTONS}", "Double-click actions:");
+          ESP_LOGCONFIG("${TAG_HW_BUTTONS}", "  Button 1: %s -> %s",
+                        sl_button_1_double_click_action->current_option().c_str(),
+                        tx_button_1_double_click_target->state.c_str());
+          if (${gang_count} >= 2)
+            ESP_LOGCONFIG("${TAG_HW_BUTTONS}", "  Button 2: %s -> %s",
+                          sl_button_2_double_click_action->current_option().c_str(),
+                          tx_button_2_double_click_target->state.c_str());
+          if (${gang_count} >= 3)
+            ESP_LOGCONFIG("${TAG_HW_BUTTONS}", "  Button 3: %s -> %s",
+                          sl_button_3_double_click_action->current_option().c_str(),
+                          tx_button_3_double_click_target->state.c_str());
+          if (${gang_count} >= 4)
+            ESP_LOGCONFIG("${TAG_HW_BUTTONS}", "  Button 4: %s -> %s",
+                          sl_button_4_double_click_action->current_option().c_str(),
+                          tx_button_4_double_click_target->state.c_str());
 
   - id: !extend dump_config_list_packages
     then:
@@ -487,4 +763,124 @@ select:
         - lambda: |-
             id(button_actions_packed) = (id(button_actions_packed) & ~(0x0F << 12)) |
                                         ((id(sl_button_4_action).active_index().value_or(1) & 0x0F) << 12);
+
+  - &button_select_double_click_base
+    id: sl_button_1_double_click_action
+    name: Button 1 double-click action
+    platform: template
+    options:
+      - "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_1_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}"
+    initial_option: "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+    optimistic: true
+    restore_value: true
+    internal: ${gang_count < 1}
+    entity_category: config
+    disabled_by_default: false
+    icon: mdi:gesture-double-tap
+
+  - id: sl_button_2_double_click_action
+    name: Button 2 double-click action
+    platform: template
+    options:
+      - "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_2_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}"
+    initial_option: "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+    internal: ${gang_count < 2}
+    <<: *button_select_double_click_base
+
+  - id: sl_button_3_double_click_action
+    name: Button 3 double-click action
+    platform: template
+    options:
+      - "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_3_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}"
+    initial_option: "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+    internal: ${gang_count < 3}
+    <<: *button_select_double_click_base
+
+  - id: sl_button_4_double_click_action
+    name: Button 4 double-click action
+    platform: template
+    options:
+      - "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_4_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TOGGLE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_ON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_HA_TURN_OFF_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PLAY_PAUSE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_NEXT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_PREVIOUS_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_MEDIA_STOP_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCRIPT_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_SCENE_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_BUTTON_TEXT}"
+      - "${BUTTON_DOUBLE_CLICK_ACTION_AUTOMATION_TEXT}"
+    initial_option: "${BUTTON_DOUBLE_CLICK_ACTION_NONE_TEXT}"
+    internal: ${gang_count < 4}
+    <<: *button_select_double_click_base
+
+text:
+  - &button_double_click_target_base
+    id: tx_button_1_double_click_target
+    name: Button 1 double-click target
+    platform: template
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    min_length: 0
+    max_length: 100
+    internal: ${gang_count < 1}
+    entity_category: config
+    disabled_by_default: false
+    icon: mdi:form-textbox
+
+  - id: tx_button_2_double_click_target
+    name: Button 2 double-click target
+    internal: ${gang_count < 2}
+    <<: *button_double_click_target_base
+
+  - id: tx_button_3_double_click_target
+    name: Button 3 double-click target
+    internal: ${gang_count < 3}
+    <<: *button_double_click_target_base
+
+  - id: tx_button_4_double_click_target
+    name: Button 4 double-click target
+    internal: ${gang_count < 4}
+    <<: *button_double_click_target_base
 ...

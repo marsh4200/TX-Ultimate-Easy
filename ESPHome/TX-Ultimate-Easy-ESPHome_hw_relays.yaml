@@ -489,6 +489,29 @@ script:
             ESP_LOGE("${TAG_HW_RELAYS}", "No button action selected for button %" PRIu8, button);
           }
 
+  - id: !extend button_double_click_handle
+    then:
+      - if:
+          condition:
+            lambda: return button == ${BUTTON_1_ID} && id(sl_button_1_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_1_TOGGLE_TEXT}" && ${SL_RELAY_1_MODE} != 0;
+          then:
+            - switch.toggle: sw_relay_1
+      - if:
+          condition:
+            lambda: return button == ${BUTTON_2_ID} && id(sl_button_2_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_2_TOGGLE_TEXT}" && ${SL_RELAY_2_MODE} != 0;
+          then:
+            - switch.toggle: sw_relay_2
+      - if:
+          condition:
+            lambda: return button == ${BUTTON_3_ID} && id(sl_button_3_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_3_TOGGLE_TEXT}" && ${SL_RELAY_3_MODE} != 0;
+          then:
+            - switch.toggle: sw_relay_3
+      - if:
+          condition:
+            lambda: return button == ${BUTTON_4_ID} && id(sl_button_4_double_click_action).current_option() == "${BUTTON_DOUBLE_CLICK_ACTION_RELAY_4_TOGGLE_TEXT}" && ${SL_RELAY_4_MODE} != 0;
+          then:
+            - switch.toggle: sw_relay_4
+
   - id: !extend dump_config
     then:
       - lambda: |-
