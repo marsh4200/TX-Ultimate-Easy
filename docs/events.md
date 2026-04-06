@@ -234,3 +234,15 @@ action:
 
 This event engine provides a robust and extensible framework for handling device interactions,
 allowing users to implement highly customized automations with ease.
+
+## Recommended Home Assistant UI Integration
+
+If you want Home Assistant to show its normal live entity/service pickers, move the
+target selection into Home Assistant instead of trying to build the entity list in ESPHome.
+
+This repository includes a ready-to-use automation blueprint:
+
+`docs/home_assistant/blueprints/automation/tx_ultimate_easy_button_event_action.yaml`
+
+It listens for TX Ultimate Easy button events and lets Home Assistant handle the action
+selection through its own UI selectors.
